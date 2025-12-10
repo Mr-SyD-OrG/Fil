@@ -23,6 +23,373 @@ logger = logging.getLogger(__name__)
 TIMEZONE = "Asia/Kolkata"
 BATCH_FILES = {}
 
+
+import os
+import asyncio
+from typing import Optional, Dict, Any
+from motor.motor_asyncio import AsyncIOMotorClient
+from pyrogram import Client, filters
+from pyrogram.types import (
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    Message,
+    CallbackQuery,
+)
+
+
+
+async def is_admin(chat_id: int, user_id: int) -> bool:
+    try:
+        member = await app.get_chat_member(chat_id, user_id)
+        return member.status in ("administrator", "creator")
+    except Exception:
+        return False
+
+async def list_filters(chat_id: int):
+    cursor = filters_col.find({"chat_id": chat_id})
+    return await cursor.to_list(length=None)
+
+async def create_filter_doc(chat_id: int, trigger: str, response_text: str = "", button_text: Optional[str] = None, button_url: Optional[str] = None, photo_file_id: Optional[str] = None) -> Dict[str, Any]:
+    doc = {
+        "chat_id": chat_id,
+        "trigger": trigger,
+        "response_text": response_text,
+        "button_text": button_text,
+        "button_url": button_url,
+        "photo_file_id": photo_file_id,
+    }
+    res = await filters_col.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return doc
+
+async def get_filter(chat_id: int, trigger: str):
+    return await filters_col.find_one({"chat_id": chat_id, "trigger": trigger})
+
+async def delete_filter(chat_id: int, trigger: str):
+    return await filters_col.delete_one({"chat_id": chat_id, "trigger": trigger})
+
+async def delete_all_filters(chat_id: int):
+    return await filters_col.delete_many({"chat_id": chat_id})
+
+async def update_filter(chat_id: int, trigger: str, update: Dict[str, Any]):
+    return await filters_col.update_one({"chat_id": chat_id, "trigger": trigger}, {"$set": update})
+
+# Build keyboard for main syd menu
+def syd_main_kb():
+    kb = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("Show filters", callback_data="syd_show")],
+            [InlineKeyboardButton("Add filter", callback_data="syd_add")],
+            [InlineKeyboardButton("Delete filter", callback_data="syd_delete")],
+            [InlineKeyboardButton("Delete all", callback_data="syd_delete_all")],
+            [InlineKeyboardButton("Close", callback_data="syd_close")],
+        ]
+    )
+    return kb
+
+# Utility to create inline button if url exists
+def make_reply_markup(button_text: Optional[str], button_url: Optional[str]):
+    if button_text and button_url:
+        return InlineKeyboardMarkup([[InlineKeyboardButton(button_text, url=button_url)]])
+    return None
+
+# ---------------------- /syd command ----------------------
+
+@Client.on_message(filters.command("syd") & filters.group)
+async def syd_command_handler(client: Client, message: Message):
+    # Only admins can open
+    if not await is_admin(message.chat.id, message.from_user.id):
+        await message.reply_text("Only group admins can use /syd")
+        return
+
+    await message.reply_text("Syd panel:", reply_markup=syd_main_kb())
+
+# ---------------------- Callback query handlers ----------------------
+
+@Client.on_callback_query(filters.regex(r"^syd_"))
+async def syd_callback(client: Client, cb: CallbackQuery):
+    data = cb.data
+    chat_id = cb.message.chat.id
+    user_id = cb.from_user.id
+
+    if not await is_admin(chat_id, user_id):
+        await cb.answer("Admins only", show_alert=True)
+        return
+
+    # Show filters list
+    if data == "syd_show":
+        items = await list_filters(chat_id)
+        if not items:
+            await cb.message.edit_text("No filters set yet.")
+            await cb.answer()
+            return
+
+        # Build list keyboard (paginated simple)
+        kb_rows = []
+        for it in items:
+            trig = it.get("trigger")
+            kb_rows.append([InlineKeyboardButton(f"{trig}", callback_data=f"syd_view|{trig}")])
+        kb_rows.append([InlineKeyboardButton("Back", callback_data="syd_back")])
+        await cb.message.edit_text("Filters:", reply_markup=InlineKeyboardMarkup(kb_rows))
+        await cb.answer()
+        return
+
+    if data.startswith("syd_view|"):
+        _, trig = data.split("|", 1)
+        doc = await get_filter(chat_id, trig)
+        if not doc:
+            await cb.answer("Filter not found", show_alert=True)
+            return
+        text = f"Trigger: <code>{doc['trigger']}</code>\nResponse: {doc.get('response_text') or '<i>empty</i>'}"
+        kb = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("Show as user", callback_data=f"syd_send|{trig}")],
+                [InlineKeyboardButton("Edit", callback_data=f"syd_edit|{trig}")],
+                [InlineKeyboardButton("Delete", callback_data=f"syd_remove|{trig}")],
+                [InlineKeyboardButton("Back", callback_data="syd_back")],
+            ]
+        )
+        await cb.message.edit_text(text, reply_markup=kb)
+        await cb.answer()
+        return
+
+    if data.startswith("syd_send|"):
+        _, trig = data.split("|", 1)
+        doc = await get_filter(chat_id, trig)
+        if not doc:
+            await cb.answer("Filter not found", show_alert=True)
+            return
+        # emulate sending as user: bot will send message in chat
+        markup = make_reply_markup(doc.get("button_text"), doc.get("button_url"))
+        if doc.get("photo_file_id"):
+            await client.send_photo(chat_id, doc.get("photo_file_id"), caption=doc.get("response_text") or "", reply_markup=markup)
+        else:
+            await client.send_message(chat_id, doc.get("response_text") or "", reply_markup=markup)
+        await cb.answer("Sent")
+        return
+
+    if data.startswith("syd_remove|"):
+        _, trig = data.split("|", 1)
+        await delete_filter(chat_id, trig)
+        await cb.message.edit_text(f"Deleted filter <code>{trig}</code>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="syd_back")]]))
+        await cb.answer()
+        return
+
+    if data == "syd_back":
+        await cb.message.edit_text("Syd panel:", reply_markup=syd_main_kb())
+        await cb.answer()
+        return
+
+    if data == "syd_add":
+        await cb.message.edit_text("Adding a new filter. You will be asked step-by-step. Send /skip to skip an optional step.")
+        await cb.answer()
+        await handle_add_flow(chat_id, cb.from_user.id, cb.message)
+        return
+
+    if data == "syd_delete":
+        # ask for trigger to delete
+        await cb.message.edit_text("Send the exact trigger text you want to delete (or /cancel):")
+        await cb.answer()
+        try:
+            msg = await app.ask(chat_id, timeout=60)
+        except Exception:
+            await cb.message.edit_text("Timeout or cancelled.")
+            return
+        if msg.text and msg.text.lower() not in ("/cancel", "/skip"):
+            res = await delete_filter(chat_id, msg.text)
+            if res.deleted_count:
+                await msg.reply_text(f"Deleted filter: {msg.text}")
+            else:
+                await msg.reply_text("No such filter found.")
+        else:
+            await msg.reply_text("Cancelled")
+        # return to main panel
+        await msg.reply_text("Syd panel:", reply_markup=syd_main_kb())
+        return
+
+    if data == "syd_delete_all":
+        await cb.message.edit_text("Are you sure you want to delete ALL filters? Reply with 'YES' to confirm.")
+        await cb.answer()
+        try:
+            msg = await app.ask(chat_id, timeout=30)
+        except Exception:
+            await cb.message.edit_text("Timeout. Cancelled.")
+            return
+        if msg.text and msg.text.strip().upper() == "YES":
+            await delete_all_filters(chat_id)
+            await msg.reply_text("All filters deleted.")
+        else:
+            await msg.reply_text("Cancelled.")
+        await msg.reply_text("Syd panel:", reply_markup=syd_main_kb())
+        return
+
+    if data == "syd_close":
+        try:
+            await cb.message.delete()
+        except Exception:
+            await cb.answer()
+        return
+
+    # Edit flow
+    if data.startswith("syd_edit|"):
+        _, trig = data.split("|", 1)
+        await cb.message.edit_text("Editing filter. You will be asked for new values. Send /skip to keep the current value.")
+        await cb.answer()
+        await handle_edit_flow(chat_id, cb.from_user.id, cb.message, trig)
+        return
+
+# ---------------------- Add / Edit flows ----------------------
+
+async def handle_add_flow(chat_id: int, user_id: int, panel_message: Message):
+    # Ask for trigger text
+    try:
+        await app.send_message(chat_id, "Send the trigger text (the text to match):")
+        trigger_msg = await app.ask(chat_id, timeout=180)
+    except Exception:
+        await panel_message.reply_text("Timeout. Add cancelled.")
+        return
+    if not trigger_msg.text or trigger_msg.text.strip() in ("/cancel", "/skip"):
+        await trigger_msg.reply_text("Invalid trigger. Cancelled.")
+        return
+    trigger = trigger_msg.text.strip()
+
+    # Ask for response text
+    await app.send_message(chat_id, "Send the response text the bot should send (or /skip for empty):")
+    try:
+        resp_msg = await app.ask(chat_id, timeout=180)
+    except Exception:
+        await panel_message.reply_text("Timeout. Add cancelled.")
+        return
+    response_text = ""
+    if resp_msg.text and resp_msg.text.strip() not in ("/skip", "/cancel"):
+        response_text = resp_msg.text
+
+    # Ask for button text
+    await app.send_message(chat_id, "Send button text (optional) or /skip:")
+    try:
+        btn_msg = await app.ask(chat_id, timeout=120)
+    except Exception:
+        await panel_message.reply_text("Timeout. Add cancelled.")
+        return
+    button_text = None
+    button_url = None
+    if btn_msg.text and btn_msg.text.strip() not in ("/skip", "/cancel"):
+        button_text = btn_msg.text.strip()
+        # ask for url
+        await app.send_message(chat_id, "Send the URL for the button (must start with http:// or https://) or /skip:")
+        try:
+            url_msg = await app.ask(chat_id, timeout=120)
+        except Exception:
+            await panel_message.reply_text("Timeout. Add cancelled.")
+            return
+        if url_msg.text and url_msg.text.strip() not in ("/skip", "/cancel"):
+            button_url = url_msg.text.strip()
+
+    # Ask for photo (optional)
+    await app.send_message(chat_id, "Send a photo to attach (optional) or /skip:")
+    try:
+        photo_msg = await app.ask(chat_id, timeout=180)
+    except Exception:
+        await panel_message.reply_text("Timeout. Add cancelled.")
+        return
+    photo_file_id = None
+    if photo_msg.photo:
+        # take highest quality file_id
+        photo_file_id = photo_msg.photo.file_id
+
+    # create filter
+    await create_filter_doc(chat_id, trigger, response_text=response_text, button_text=button_text, button_url=button_url, photo_file_id=photo_file_id)
+    await app.send_message(chat_id, f"Filter <code>{trigger}</code> added.", reply_markup=syd_main_kb())
+
+async def handle_edit_flow(chat_id: int, user_id: int, panel_message: Message, trigger: str):
+    doc = await get_filter(chat_id, trigger)
+    if not doc:
+        await panel_message.edit_text("Filter not found.")
+        return
+    # Ask for new response text
+    await app.send_message(chat_id, f"Current response text: {doc.get('response_text') or '<empty>'}\nSend new response text or /skip to keep current:")
+    try:
+        resp_msg = await app.ask(chat_id, timeout=180)
+    except Exception:
+        await panel_message.edit_text("Timeout. Edit cancelled.")
+        return
+    update = {}
+    if resp_msg.text and resp_msg.text.strip() not in ("/skip", "/cancel"):
+        update['response_text'] = resp_msg.text
+
+    # Button text/url
+    await app.send_message(chat_id, f"Current button text: {doc.get('button_text') or '<none>'}\nSend new button text or /skip:")
+    try:
+        btn_msg = await app.ask(chat_id, timeout=120)
+    except Exception:
+        await panel_message.edit_text("Timeout. Edit cancelled.")
+        return
+    if btn_msg.text and btn_msg.text.strip() not in ("/skip", "/cancel"):
+        update['button_text'] = btn_msg.text.strip()
+        await app.send_message(chat_id, f"Current button URL: {doc.get('button_url') or '<none>'}\nSend new URL or /skip:")
+        try:
+            url_msg = await app.ask(chat_id, timeout=120)
+        except Exception:
+            await panel_message.edit_text("Timeout. Edit cancelled.")
+            return
+        if url_msg.text and url_msg.text.strip() not in ("/skip", "/cancel"):
+            update['button_url'] = url_msg.text.strip()
+    # Photo
+    await app.send_message(chat_id, f"Send new photo to replace (or /skip to keep current):")
+    try:
+        photo_msg = await app.ask(chat_id, timeout=180)
+    except Exception:
+        await panel_message.edit_text("Timeout. Edit cancelled.")
+        return
+    if photo_msg.photo:
+        update['photo_file_id'] = photo_msg.photo.file_id
+
+    if update:
+        await update_filter(chat_id, trigger, update)
+        await app.send_message(chat_id, "Filter updated.", reply_markup=syd_main_kb())
+    else:
+        await app.send_message(chat_id, "No changes made.", reply_markup=syd_main_kb())
+
+# ---------------------- Message watcher ----------------------
+
+@Client.on_message(filters.group & ~filters.service)
+async def message_watcher(client: Client, message: Message):
+    # check text and caption
+    text_to_check = ""
+    if message.text:
+        text_to_check = message.text.lower()
+    elif message.caption:
+        text_to_check = message.caption.lower()
+    else:
+        text_to_check = ""
+
+    if not text_to_check:
+        return
+
+    # fetch filters for this chat
+    items = await list_filters(message.chat.id)
+    if not items:
+        return
+
+    # iterate and send the first matching filter (you can adjust to send all matches)
+    for it in items:
+        trig = it.get('trigger', '').lower()
+        if not trig:
+            continue
+        if trig in text_to_check:
+            # matched
+            markup = make_reply_markup(it.get('button_text'), it.get('button_url'))
+            try:
+                if it.get('photo_file_id'):
+                    await client.send_photo(message.chat.id, it.get('photo_file_id'), caption=it.get('response_text') or "", reply_markup=markup)
+                else:
+                    await client.send_message(message.chat.id, it.get('response_text') or "", reply_markup=markup)
+            except Exception as e:
+                # log error but continue
+                print("Failed to send filter response:", e)
+            # stop after first match to avoid spam; remove break to allow multiple
+            break
+
 @Client.on_message(filters.command("start") & filters.incoming)
 async def start(client, message):
     if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
