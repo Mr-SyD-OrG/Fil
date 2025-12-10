@@ -50,15 +50,9 @@ class Database:
         self.filters = self.db.filters
 
 
-# ---------------------- Filter Methods ----------------------
-    GLOBAL_CHAT = 0
-
-    async def create_filter_doc(self, chat_id, trigger, response_text="", button_text=None, button_url=None, photo_file_id=None):
-        if not chat_id:
-            chat_id = self.GLOBAL_CHAT
+    async def create_filter_doc(self, trigger, response_text="", button_text=None, button_url=None, photo_file_id=None):
         doc = {
-            "chat_id": chat_id,
-            "trigger": trigger,
+            "trigger": trigger.lower(),
             "response_text": response_text,
             "button_text": button_text,
             "button_url": button_url,
@@ -68,40 +62,24 @@ class Database:
         doc["_id"] = res.inserted_id
         return doc
 
-    async def get_filter(self, chat_id, trigger):
-        return await self.filters.find_one({
-            "$or": [
-                {"chat_id": chat_id, "trigger": trigger},
-                {"chat_id": self.GLOBAL_CHAT, "trigger": trigger},
-            ]
-        })
+    async def get_filter(self, trigger):
+        return await self.filters.find_one({"trigger": trigger.lower()})
 
-    async def delete_filter(self, chat_id, trigger):
-        return await self.filters.delete_many({
-            "$or": [
-                {"chat_id": chat_id, "trigger": trigger},
-                {"chat_id": self.GLOBAL_CHAT, "trigger": trigger},
-            ]
-        })
+    async def list_filters(self):
+        return await self.filters.find().to_list(None)
 
-    async def delete_all_filters(self, chat_id):
-        return await self.filters.delete_many({
-            "$or": [
-                {"chat_id": chat_id},
-                {"chat_id": self.GLOBAL_CHAT},
-            ]
-        })
+    async def delete_filter(self, trigger):
+        return await self.filters.delete_one({"trigger": trigger.lower()})
 
-    async def update_filter(self, chat_id, trigger, update):
-        return await self.filters.update_many(
-            {
-                "$or": [
-                    {"chat_id": chat_id, "trigger": trigger},
-                    {"chat_id": self.GLOBAL_CHAT, "trigger": trigger},
-                ]
-            },
+    async def delete_all_filters(self):
+        return await self.filters.delete_many({})
+
+    async def update_filter(self, trigger, update):
+        return await self.filters.update_one(
+            {"trigger": trigger.lower()},
             {"$set": update}
         )
+
 
     async def set_channels(self, user_id: int, channel_ids):
         """
