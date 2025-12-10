@@ -27,7 +27,6 @@ BATCH_FILES = {}
 import os
 import asyncio
 from typing import Optional, Dict, Any
-from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters
 from pyrogram.types import (
     InlineKeyboardMarkup,
@@ -45,34 +44,6 @@ async def is_admin(chat_id: int, user_id: int) -> bool:
     except Exception:
         return False
 
-async def list_filters(chat_id: int):
-    cursor = filters_col.find({"chat_id": chat_id})
-    return await cursor.to_list(length=None)
-
-async def create_filter_doc(chat_id: int, trigger: str, response_text: str = "", button_text: Optional[str] = None, button_url: Optional[str] = None, photo_file_id: Optional[str] = None) -> Dict[str, Any]:
-    doc = {
-        "chat_id": chat_id,
-        "trigger": trigger,
-        "response_text": response_text,
-        "button_text": button_text,
-        "button_url": button_url,
-        "photo_file_id": photo_file_id,
-    }
-    res = await filters_col.insert_one(doc)
-    doc["_id"] = res.inserted_id
-    return doc
-
-async def get_filter(chat_id: int, trigger: str):
-    return await filters_col.find_one({"chat_id": chat_id, "trigger": trigger})
-
-async def delete_filter(chat_id: int, trigger: str):
-    return await filters_col.delete_one({"chat_id": chat_id, "trigger": trigger})
-
-async def delete_all_filters(chat_id: int):
-    return await filters_col.delete_many({"chat_id": chat_id})
-
-async def update_filter(chat_id: int, trigger: str, update: Dict[str, Any]):
-    return await filters_col.update_one({"chat_id": chat_id, "trigger": trigger}, {"$set": update})
 
 # Build keyboard for main syd menu
 def syd_main_kb():
@@ -95,12 +66,8 @@ def make_reply_markup(button_text: Optional[str], button_url: Optional[str]):
 
 # ---------------------- /syd command ----------------------
 
-@Client.on_message(filters.command("syd") & filters.group)
+@Client.on_message(filters.command("syd"))
 async def syd_command_handler(client: Client, message: Message):
-    # Only admins can open
-    if not await is_admin(message.chat.id, message.from_user.id):
-        await message.reply_text("Only group admins can use /syd")
-        return
 
     await message.reply_text("Syd panel:", reply_markup=syd_main_kb())
 
