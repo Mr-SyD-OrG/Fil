@@ -47,8 +47,37 @@ class Database:
         self.all = self.db.filed
         self.words = self.db.words
         self.chnl = self.db.chnl
+        self.filters = self.db.filters
 
 
+# ---------------------- Filter Methods ----------------------
+    async def create_filter_doc(self, chat_id, trigger, response_text="", button_text=None, button_url=None, photo_file_id=None):
+        doc = {
+            "chat_id": chat_id,
+            "trigger": trigger,
+            "response_text": response_text,
+            "button_text": button_text,
+            "button_url": button_url,
+            "photo_file_id": photo_file_id,
+        }
+        res = await self.filters.insert_one(doc)
+        doc["_id"] = res.inserted_id
+        return doc
+
+
+    async def get_filter(self, chat_id, trigger):
+        return await self.filters.find_one({"chat_id": chat_id, "trigger": trigger})
+
+
+    async def delete_filter(self, chat_id, trigger):
+        return await self.filters.delete_one({"chat_id": chat_id, "trigger": trigger})
+
+
+    async def delete_all_filters(self, chat_id):
+        return await self.filters.delete_many({"chat_id": chat_id})
+
+    async def update_filter(self, chat_id, trigger, update):
+        return await self.filters.update_one({"chat_id": chat_id, "trigger": trigger}, {"$set": update})
 
     async def set_channels(self, user_id: int, channel_ids):
         """
