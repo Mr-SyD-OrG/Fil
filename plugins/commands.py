@@ -156,7 +156,7 @@ Response: {doc.get("response_text") or "<empty>"}"""
         trigger = trigger_msg.text.strip().lower()
 
         # --- RESPONSE TEXT ---
-        await client.send_message(chat_id, "Send the **response text** (or /skip): \nTags;\n`<b>` `</b>`\n`<strong>` `</strong>`\n`<i>` `</i>`\n`<em>` `</em>`\n`<u>` `</u>`\n`<ins>` `</ins>`\n`<s>` `</s>`\n`<del>` `</del>`\n`<code>` `</code>`\n`<pre>` `</pre>`\n`<blockquote>` `</blockquote>`\n`<a>` `</a>`\n`<spoiler>` `</spoiler>`\n `<a href=""> </a>`")
+        await client.send_message(chat_id, "Send the **response text** (or /skip):")
         resp_msg = await client.listen(chat_id)
 
         response_text = ""
