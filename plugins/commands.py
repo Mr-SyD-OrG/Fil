@@ -46,13 +46,15 @@ def syd_main_kb():
     kb = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("Show filters", callback_data="syd_show")],
-            [InlineKeyboardButton("Add filter", callback_data="syd_add")],
-            [InlineKeyboardButton("Delete filter", callback_data="syd_delete")],
-            [InlineKeyboardButton("Delete all", callback_data="syd_delete_all")],
+            [InlineKeyboardButton("Add filter", callback_data="syd_add"),
+            InlineKeyboardButton("Copy filter", callback_data="syd_copy")],
+            [InlineKeyboardButton("Delete filter", callback_data="syd_delete"),
+            InlineKeyboardButton("Delete all", callback_data="syd_delete_all")],
             [InlineKeyboardButton("Close", callback_data="syd_close")],
         ]
     )
     return kb
+
 
 # Utility to create inline button if url exists
 def make_reply_markup(button_text: Optional[str], button_url: Optional[str]):
@@ -194,6 +196,80 @@ Response: {doc.get("response_text") or "<empty>"}"""
             reply_markup=syd_main_kb()
         )
         return
+    if data == "syd_copy":
+        await cb.message.edit_text(
+            "📌 **Copy Filter Mode**\n\n"
+            "Send the **ORIGINAL trigger** you want to copy from.\n\n"
+            "Use /cancel to stop."
+        )
+
+        try:
+            src_msg = await client.listen(chat_id, timeout=120)
+        except Exception:
+            return await cb.message.edit_text("⏳ Timeout. Cancelled.", reply_markup=syd_main_kb())
+
+        if not src_msg.text or src_msg.text.lower() == "/cancel":
+            return await cb.message.edit_text("❌ Cancelled.", reply_markup=syd_main_kb())
+
+        source_trigger = src_msg.text.strip().lower()
+
+        src_doc = await db.get_filter(source_trigger)
+        if not src_doc:
+            return await client.send_message(
+                chat_id,
+                "❌ Source filter not found!",
+                reply_markup=syd_main_kb()
+            )
+
+        await client.send_message(
+            chat_id,
+            "✅ Source found!\n\n"
+            "Now send **new trigger keywords** one-by-one.\n\n"
+            "Send:\n"
+            "• `/done` → Finish\n"
+            "• `/cancel` → Cancel all"
+        )
+
+        copied = 0
+
+        while True:
+            try:
+                new_msg = await client.listen(chat_id, timeout=300)
+            except Exception:
+                break
+
+            if not new_msg.text:
+                continue
+
+            key = new_msg.text.lower().strip()
+
+            if key == "/cancel":
+                await client.send_message(chat_id, "❌ Copy cancelled.", reply_markup=syd_main_kb())
+                return
+
+            if key == "/done":
+                await client.send_message(
+                    chat_id,
+                    f"✅ Copy finished.\n\nTotal copied triggers: `{copied}`",
+                    reply_markup=syd_main_kb()
+                )
+                return
+
+            exists = await db.get_filter(key)
+            if exists:
+                await client.send_message(chat_id, f"⚠️ `{key}` already exists. Skipped.")
+                continue
+
+            await db.create_filter_doc(
+                trigger=key,
+                response_text=src_doc.get("response_text"),
+                button_text=src_doc.get("button_text"),
+                button_url=src_doc.get("button_url"),
+                photo_file_id=src_doc.get("photo_file_id"),
+            )
+
+            copied += 1
+            await client.send_message(chat_id, f"✅ Copied to `{key}`")
 
     
 
@@ -238,6 +314,7 @@ async def message_watcher(client: Client, message: Message):
     items = await db.list_filters()
     if not items:
         return
+    
     for it in items:
         trig = it["trigger"].lower()
         if trig in text_to_check:
@@ -245,19 +322,25 @@ async def message_watcher(client: Client, message: Message):
             markup = make_reply_markup(it.get("button_text"), it.get("button_url"))
 
             if it.get("photo_file_id"):
-                await client.send_photo(
+                syd=await client.send_photo(
                     message.chat.id,
                     it["photo_file_id"],
                     caption=it.get("response_text") or "",
                     reply_markup=markup
                 )
             else:
-                await client.send_message(
+                syd=await client.send_message(
                     message.chat.id,
                     it.get("response_text") or "",
                     reply_markup=markup
                 )
+            await asyncio.sleep(300)
+            try:
+                await syd.delete()
+            except Exception:
+                pass
             break
+            
 
 
 @Client.on_message(filters.command("start") & filters.incoming)
