@@ -58,9 +58,12 @@ def syd_main_kb():
 
 # Utility to create inline button if url exists
 def make_reply_markup(button_text: Optional[str], button_url: Optional[str]):
+    buttons = [
+        [InlineKeyboardButton("ϟ Jᴏɪɴ Oᴜʀ Cʜᴀɴɴᴇʟ  ϟ", url="https://t.me/Mod_Moviez_X")]
+    ]
     if button_text and button_url:
-        return InlineKeyboardMarkup([[InlineKeyboardButton(button_text, url=button_url)]])
-    return None
+        buttons[0].append(InlineKeyboardButton(button_text, url=button_url))
+    return InlineKeyboardMarkup(buttons)
 
 # ---------------------- /syd command ----------------------
 
