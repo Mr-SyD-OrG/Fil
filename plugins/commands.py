@@ -156,7 +156,7 @@ Response: {doc.get("response_text") or "<empty>"}"""
         trigger = trigger_msg.text.strip().lower()
 
         # --- RESPONSE TEXT ---
-        await client.send_message(chat_id, "Send the **response text** (or /skip):")
+        await client.send_message(chat_id, "Send the **response text** (or /skip): \nTags;\n`<b>` `</b>`\n`<strong>` `</strong>`\n`<i>` `</i>`\n`<em>` `</em>`\n`<u>` `</u>`\n`<ins>` `</ins>`\n`<s>` `</s>`\n`<del>` `</del>`\n`<code>` `</code>`\n`<pre>` `</pre>`\n`<blockquote>` `</blockquote>`\n`<a>` `</a>`\n`<spoiler>` `</spoiler>`\n `<a href=""> </a>`")
         resp_msg = await client.listen(chat_id)
 
         response_text = ""
@@ -164,14 +164,14 @@ Response: {doc.get("response_text") or "<empty>"}"""
             response_text = resp_msg.text
 
         # --- BUTTON TEXT ---
-        await client.send_message(chat_id, "Send **button text** (or /skip):")
+        await client.send_message(chat_id, "Send **button text** (or /skip or /default):")
         btn_msg = await client.listen(chat_id)
 
         button_text = None
         button_url = None
 
         if btn_msg.text and btn_msg.text.lower() != "/skip":
-            button_text = btn_msg.text if btn_msg.text =! "/default" else "ϟ  𝘖𝘱𝘦𝘯 𝘊𝘩𝘢𝘯𝘯𝘦𝘭  ϟ"
+            button_text = btn_msg.text if btn_msg.text != "/default" else "ϟ  𝘖𝘱𝘦𝘯 𝘊𝘩𝘢𝘯𝘯𝘦𝘭  ϟ"
             await client.send_message(chat_id, "Send **button URL**:")
             url_msg = await client.listen(chat_id)
             button_url = url_msg.text
