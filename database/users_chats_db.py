@@ -51,7 +51,11 @@ class Database:
 
 
 # ---------------------- Filter Methods ----------------------
+    GLOBAL_CHAT = 0
+
     async def create_filter_doc(self, chat_id, trigger, response_text="", button_text=None, button_url=None, photo_file_id=None):
+        if not chat_id:
+            chat_id = self.GLOBAL_CHAT
         doc = {
             "chat_id": chat_id,
             "trigger": trigger,
@@ -64,20 +68,40 @@ class Database:
         doc["_id"] = res.inserted_id
         return doc
 
-
     async def get_filter(self, chat_id, trigger):
-        return await self.filters.find_one({"chat_id": chat_id, "trigger": trigger})
-
+        return await self.filters.find_one({
+            "$or": [
+                {"chat_id": chat_id, "trigger": trigger},
+                {"chat_id": self.GLOBAL_CHAT, "trigger": trigger},
+            ]
+        })
 
     async def delete_filter(self, chat_id, trigger):
-        return await self.filters.delete_one({"chat_id": chat_id, "trigger": trigger})
-
+        return await self.filters.delete_many({
+            "$or": [
+                {"chat_id": chat_id, "trigger": trigger},
+                {"chat_id": self.GLOBAL_CHAT, "trigger": trigger},
+            ]
+        })
 
     async def delete_all_filters(self, chat_id):
-        return await self.filters.delete_many({"chat_id": chat_id})
+        return await self.filters.delete_many({
+            "$or": [
+                {"chat_id": chat_id},
+                {"chat_id": self.GLOBAL_CHAT},
+            ]
+        })
 
     async def update_filter(self, chat_id, trigger, update):
-        return await self.filters.update_one({"chat_id": chat_id, "trigger": trigger}, {"$set": update})
+        return await self.filters.update_many(
+            {
+                "$or": [
+                    {"chat_id": chat_id, "trigger": trigger},
+                    {"chat_id": self.GLOBAL_CHAT, "trigger": trigger},
+                ]
+            },
+            {"$set": update}
+        )
 
     async def set_channels(self, user_id: int, channel_ids):
         """
