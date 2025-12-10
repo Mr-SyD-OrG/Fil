@@ -171,7 +171,7 @@ Response: {doc.get("response_text") or "<empty>"}"""
         button_url = None
 
         if btn_msg.text and btn_msg.text.lower() != "/skip":
-            button_text = btn_msg.text
+            button_text = btn_msg.text if btn_msg.text =! "/default" else "ϟ  𝘖𝘱𝘦𝘯 𝘊𝘩𝘢𝘯𝘯𝘦𝘭  ϟ"
             await client.send_message(chat_id, "Send **button URL**:")
             url_msg = await client.listen(chat_id)
             button_url = url_msg.text
