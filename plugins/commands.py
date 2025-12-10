@@ -133,6 +133,67 @@ Response: {doc.get("response_text") or "<empty>"}"""
         await cb.message.delete()
         return
 
+    if data == "syd_add":
+        await cb.message.edit_text(
+            "➕ **Adding New Filter**\n\n"
+            "Send the **trigger word/text** now.\n\n"
+            "Use /cancel to stop."
+        )
+
+        try:
+            trigger_msg = await client.listen(chat_id, timeout=120)
+        except Exception:
+            return await cb.message.edit_text("⏳ Timeout. Add cancelled.", reply_markup=syd_main_kb())
+
+        if not trigger_msg.text or trigger_msg.text.lower() == "/cancel":
+            return await cb.message.edit_text("❌ Cancelled.", reply_markup=syd_main_kb())
+
+        trigger = trigger_msg.text.strip().lower()
+
+        # --- RESPONSE TEXT ---
+        await client.send_message(chat_id, "Send the **response text** (or /skip):")
+        resp_msg = await client.listen(chat_id)
+
+        response_text = ""
+        if resp_msg.text and resp_msg.text.lower() != "/skip":
+            response_text = resp_msg.text
+
+        # --- BUTTON TEXT ---
+        await client.send_message(chat_id, "Send **button text** (or /skip):")
+        btn_msg = await client.listen(chat_id)
+
+        button_text = None
+        button_url = None
+
+        if btn_msg.text and btn_msg.text.lower() != "/skip":
+            button_text = btn_msg.text
+            await client.send_message(chat_id, "Send **button URL**:")
+            url_msg = await client.listen(chat_id)
+            button_url = url_msg.text
+
+        # --- PHOTO ---
+        await client.send_message(chat_id, "Send **photo** (or /skip):")
+        photo_msg = await client.listen(chat_id)
+
+        photo_file_id = None
+        if photo_msg.photo:
+            photo_file_id = photo_msg.photo.file_id
+
+        # --- SAVE ---
+        await db.create_filter_doc(
+            trigger=trigger,
+            response_text=response_text,
+            button_text=button_text,
+            button_url=button_url,
+            photo_file_id=photo_file_id,
+        )
+
+        await client.send_message(
+            chat_id,
+            f"✅ **Filter Added Successfully**\n\nTrigger: `{trigger}`",
+            reply_markup=syd_main_kb()
+        )
+        return
 
     
 
@@ -168,15 +229,6 @@ async def handle_add_flow(client, chat_id):
 
     await client.send_message(chat_id, f"✅ Filter `{trigger}` added.", reply_markup=syd_main_kb())
 
-
-@Client.on_callback_query(filters.regex(r"^syd_"))
-async def syd_callback(client: Client, cb: CallbackQuery):
-    data = cb.data
-    user_id = cb.from_user.id
-    chat_id = cb.message.chat.id
-
-    if not is_admin(user_id):
-        await cb.answer("Admins only", show_alert=True)
 
 @Client.on_message(filters.group & ~filters.service)
 async def message_watcher(client: Client, message: Message):
