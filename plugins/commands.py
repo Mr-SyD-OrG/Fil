@@ -85,7 +85,7 @@ async def syd_callback(client: Client, cb: CallbackQuery):
 
     # Show filters list
     if data == "syd_show":
-        items = await list_filters(chat_id)
+        items = await db.list_filters(chat_id)
         if not items:
             await cb.message.edit_text("No filters set yet.")
             await cb.answer()
@@ -103,7 +103,7 @@ async def syd_callback(client: Client, cb: CallbackQuery):
 
     if data.startswith("syd_view|"):
         _, trig = data.split("|", 1)
-        doc = await get_filter(chat_id, trig)
+        doc = await db.get_filter(chat_id, trig)
         if not doc:
             await cb.answer("Filter not found", show_alert=True)
             return
@@ -122,7 +122,7 @@ async def syd_callback(client: Client, cb: CallbackQuery):
 
     if data.startswith("syd_send|"):
         _, trig = data.split("|", 1)
-        doc = await get_filter(chat_id, trig)
+        doc = await db.get_filter(chat_id, trig)
         if not doc:
             await cb.answer("Filter not found", show_alert=True)
             return
@@ -137,7 +137,7 @@ async def syd_callback(client: Client, cb: CallbackQuery):
 
     if data.startswith("syd_remove|"):
         _, trig = data.split("|", 1)
-        await delete_filter(chat_id, trig)
+        await db.delete_filter(chat_id, trig)
         await cb.message.edit_text(f"Deleted filter <code>{trig}</code>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back", callback_data="syd_back")]]))
         await cb.answer()
         return
@@ -150,7 +150,7 @@ async def syd_callback(client: Client, cb: CallbackQuery):
     if data == "syd_add":
         await cb.message.edit_text("Adding a new filter. You will be asked step-by-step. Send /skip to skip an optional step.")
         await cb.answer()
-        await handle_add_flow(chat_id, cb.from_user.id, cb.message)
+        await db.handle_add_flow(chat_id, cb.from_user.id, cb.message)
         return
 
     if data == "syd_delete":
@@ -163,7 +163,7 @@ async def syd_callback(client: Client, cb: CallbackQuery):
             await cb.message.edit_text("Timeout or cancelled.")
             return
         if msg.text and msg.text.lower() not in ("/cancel", "/skip"):
-            res = await delete_filter(chat_id, msg.text)
+            res = await db.delete_filter(chat_id, msg.text)
             if res.deleted_count:
                 await msg.reply_text(f"Deleted filter: {msg.text}")
             else:
@@ -183,7 +183,7 @@ async def syd_callback(client: Client, cb: CallbackQuery):
             await cb.message.edit_text("Timeout. Cancelled.")
             return
         if msg.text and msg.text.strip().upper() == "YES":
-            await delete_all_filters(chat_id)
+            await db.delete_all_filters(chat_id)
             await msg.reply_text("All filters deleted.")
         else:
             await msg.reply_text("Cancelled.")
