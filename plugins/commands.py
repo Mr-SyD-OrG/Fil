@@ -71,14 +71,9 @@ async def syd_command_handler(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex(r"^syd_"))
 async def syd_callback(client: Client, cb: CallbackQuery):
-
     data = cb.data
     chat_id = cb.message.chat.id
     user_id = cb.from_user.id
-
-    if not is_admin(user_id):
-        return await cb.answer("Admins only", show_alert=True)
-
     if data == "syd_show":
         items = await db.list_filters()
         if not items:
