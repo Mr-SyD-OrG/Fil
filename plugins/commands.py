@@ -334,14 +334,14 @@ async def message_watcher(client: Client, message: Message):
                     it["photo_file_id"],
                     caption=it.get("response_text") or "",
                     reply_markup=markup,
-                    quote=True
+                    reply_to_message_id=message.id
                 )
             else:
                 syd=await client.send_message(
                     message.chat.id,
                     it.get("response_text") or "",
                     reply_markup=markup,
-                    quote=True
+                    reply_to_message_id=message.id
                 )
             await asyncio.sleep(300)
             try:
