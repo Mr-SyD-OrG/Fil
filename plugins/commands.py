@@ -40,6 +40,11 @@ from pyrogram.types import (
 def is_admin(user_id: int) -> bool:
     return user_id in ADMINS
 
+async def listen_from_user(client, user_id, timeout=400):
+    while True:
+        msg = await client.listen(filters.private, timeout=timeout)
+        if msg.from_user and msg.from_user.id == user_id:
+            return msg
 
 # Build keyboard for main syd menu
 def syd_main_kb():
@@ -62,7 +67,7 @@ def make_reply_markup(button_text: Optional[str], button_url: Optional[str]):
         [InlineKeyboardButton("ϟ Jᴏɪɴ Oᴜʀ Cʜᴀɴɴᴇʟ  ϟ", url="https://t.me/Mod_Moviez_X")]
     ]
     if button_text and button_url:
-        buttons[0].append(InlineKeyboardButton(button_text, url=button_url))
+        buttons.append([InlineKeyboardButton(button_text, url=button_url)])
     return InlineKeyboardMarkup(buttons)
 
 # ---------------------- /syd command ----------------------
@@ -146,7 +151,7 @@ Response: {doc.get("response_text") or "<empty>"}"""
         )
 
         try:
-            trigger_msg = await client.listen(chat_id, timeout=120)
+            trigger_msg = await listen_from_user(client, user_id)
         except Exception:
             return await cb.message.edit_text("⏳ Timeout. Add cancelled.", reply_markup=syd_main_kb())
 
@@ -157,7 +162,7 @@ Response: {doc.get("response_text") or "<empty>"}"""
 
         # --- RESPONSE TEXT ---
         await client.send_message(chat_id, "Send the **response text** (or /skip):")
-        resp_msg = await client.listen(chat_id)
+        resp_msg = await listen_from_user(client, user_id)
 
         response_text = ""
         if resp_msg.text and resp_msg.text.lower() != "/skip":
@@ -165,20 +170,19 @@ Response: {doc.get("response_text") or "<empty>"}"""
 
         # --- BUTTON TEXT ---
         await client.send_message(chat_id, "Send **button text** (or /skip or /default):")
-        btn_msg = await client.listen(chat_id)
-
+        btn_msg = await listen_from_user(client, user_id)
         button_text = None
         button_url = None
 
         if btn_msg.text and btn_msg.text.lower() != "/skip":
             button_text = btn_msg.text if btn_msg.text != "/default" else "ϟ  𝘖𝘱𝘦𝘯 𝘊𝘩𝘢𝘯𝘯𝘦𝘭  ϟ"
             await client.send_message(chat_id, "Send **button URL**:")
-            url_msg = await client.listen(chat_id)
+            url_msg = await listen_from_user(client, user_id)
             button_url = url_msg.text
 
         # --- PHOTO ---
         await client.send_message(chat_id, "Send **photo** (or /skip):")
-        photo_msg = await client.listen(chat_id)
+        photo_msg = await listen_from_user(client, user_id)
 
         photo_file_id = None
         if photo_msg.photo:
@@ -207,7 +211,7 @@ Response: {doc.get("response_text") or "<empty>"}"""
         )
 
         try:
-            src_msg = await client.listen(chat_id, timeout=120)
+            src_msg = await listen_from_user(client, user_id)
         except Exception:
             return await cb.message.edit_text("⏳ Timeout. Cancelled.", reply_markup=syd_main_kb())
 
@@ -229,15 +233,15 @@ Response: {doc.get("response_text") or "<empty>"}"""
             "✅ Source found!\n\n"
             "Now send **new trigger keywords** one-by-one.\n\n"
             "Send:\n"
-            "• `/done` → Finish\n"
-            "• `/cancel` → Cancel all"
+            "• /done → Finish\n"
+            "• /cancel → Cancel all"
         )
 
         copied = 0
 
         while True:
             try:
-                new_msg = await client.listen(chat_id, timeout=300)
+                new_msg = await listen_from_user(client, user_id)
             except Exception:
                 break
 
@@ -329,13 +333,15 @@ async def message_watcher(client: Client, message: Message):
                     message.chat.id,
                     it["photo_file_id"],
                     caption=it.get("response_text") or "",
-                    reply_markup=markup
+                    reply_markup=markup,
+                    quote=True
                 )
             else:
                 syd=await client.send_message(
                     message.chat.id,
                     it.get("response_text") or "",
-                    reply_markup=markup
+                    reply_markup=markup,
+                    quote=True
                 )
             await asyncio.sleep(300)
             try:
