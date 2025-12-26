@@ -89,7 +89,8 @@ async def syd_callback(client: Client, cb: CallbackQuery):
         if not items:
             return await cb.message.edit_text("No filters set yet.")
 
-        kb = [[InlineKeyboardButton(it["trigger"], callback_data=f"syd_view|{it['trigger']}")] for it in items]
+        buttons = [InlineKeyboardButton(it["trigger"], callback_data=f"syd_view|{it['trigger']}") for it in items]
+        kb = [buttons[i:i+3] for i in range(0, len(buttons), 3)]
         kb.append([InlineKeyboardButton("Back", callback_data="syd_back")])
 
         await cb.message.edit_text("Filters:", reply_markup=InlineKeyboardMarkup(kb))
