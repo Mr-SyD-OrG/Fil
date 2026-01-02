@@ -314,8 +314,8 @@ async def handle_add_flow(client, chat_id):
     await client.send_message(chat_id, f"✅ Filter `{trigger}` added.", reply_markup=syd_main_kb())
 
 
-@Client.on_message(filters.command("user") & filters.private)
-async def user_cmd(c,m):
+@Client.on_message(filters.command("usyr") & filters.private)
+async def usyer_cmd(c,m):
     if len(m.command)<2 or not m.command[1].isdigit(): return await m.reply("Usage: /user <user_id>")
     uid=int(m.command[1])
     await m.reply(f'b <a href="tg://user?id={uid}">User</a>',parse_mode=enums.ParseMode.HTML)
