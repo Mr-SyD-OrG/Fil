@@ -314,6 +314,12 @@ async def handle_add_flow(client, chat_id):
     await client.send_message(chat_id, f"✅ Filter `{trigger}` added.", reply_markup=syd_main_kb())
 
 
+@Client.on_message(filters.command("usyd") & filters.private)
+async def user_cmd(c,m):
+    r=await c.ask(m.chat.id,"Send user id")
+    if not r.text.isdigit(): return
+    await m.reply("Done",reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("User",user_id=int(r.text))]]))
+    
 @Client.on_message(filters.group & ~filters.service)
 async def message_watcher(client: Client, message: Message):
     text_to_check = (message.text or message.caption or "").lower()
