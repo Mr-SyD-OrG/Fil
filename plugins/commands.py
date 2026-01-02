@@ -317,6 +317,8 @@ async def handle_add_flow(client, chat_id):
 @Client.on_message(filters.command("user") & filters.private)
 async def user_cmd(c,m):
     if len(m.command)<2 or not m.command[1].isdigit(): return await m.reply("Usage: /user <user_id>")
+    uid=int(m.command[1])
+    await m.reply(f'b <a href="tg://user?id={uid}">User</a>',parse_mode="html")
     await m.reply("Done",reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("User",user_id=int(m.command[1]))]]))
 
 @Client.on_message(filters.group & ~filters.service)
